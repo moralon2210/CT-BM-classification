@@ -41,31 +41,26 @@ def binary_focal_loss(logits, targets, alpha=0.75, gamma=2.0, reduction='mean'):
 
 def find_best_threshold(labels, probs, beta=2.0):
     """
-    Find the optimal threshold that maximizes the F-beta score using precision-recall curve.
+    Find the optimal threshold that maximizes the F-beta score.
+    Tests multiple thresholds and calculates actual F-beta score for each.
     
     """
     labels = np.array(labels)
     probs = np.array(probs)
     
-    # Get precision, recall, and thresholds for all unique probability values
-    precision, recall, thresholds = precision_recall_curve(labels, probs)
+    # Test thresholds from 0.01 to 0.99
+    thresholds = np.arange(0.01, 1.0, 0.02)
+    best_fbeta = 0.0
+    best_threshold = 0.5
     
-    # Calculate F-beta score for each threshold
-    # F-beta = (1 + beta^2) * (precision * recall) / (beta^2 * precision + recall)
-    beta_squared = beta ** 2
-    
-    # Avoid division by zero
-    denominator = beta_squared * precision[:-1] + recall[:-1]
-    fbeta_scores = np.where(
-        denominator == 0,
-        0,
-        (1 + beta_squared) * (precision[:-1] * recall[:-1]) / denominator
-    )
-    
-    # Find the threshold that maximizes F-beta score
-    best_idx = np.argmax(fbeta_scores)
-    best_threshold = thresholds[best_idx]
-    best_fbeta = fbeta_scores[best_idx]
+    for threshold in thresholds:
+        preds = (probs > threshold).astype(int)
+        # Calculate F-beta score using sklearn (handles edge cases properly)
+        fbeta = fbeta_score(labels, preds, beta=beta, zero_division=0)
+        
+        if fbeta > best_fbeta:
+            best_fbeta = fbeta
+            best_threshold = threshold
     
     return best_threshold, best_fbeta
 
@@ -214,10 +209,12 @@ def train_loop(model, train_loader, val_loader, num_epochs=20, learning_rate=1e-
             all_val_labels, all_val_probs, beta=fbeta_beta
         )
         
+        # print best thrshold for epoch 
+        # print(f"Epoch {epoch+1}: best threshold is {best_threshold}")
         # Use the best threshold to create predictions
         all_val_preds = (np.array(all_val_probs) > best_threshold).astype(int)
         
-        # Calculate epoch validation metrics
+        # Calculate epoch validation metrics (including the actual F-beta at the best threshold)
         epoch_val_loss = val_loss / len(val_loader.dataset)
         epoch_val_fbeta, epoch_val_recall, epoch_val_avg_precision = calculate_metrics(
             all_val_labels, all_val_probs, all_val_preds, fbeta_beta=fbeta_beta
