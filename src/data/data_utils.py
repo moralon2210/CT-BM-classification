@@ -1,16 +1,16 @@
 import pandas as pd
 import os
+from sklearn.model_selection import train_test_split, StratifiedKFold
 from pathlib import Path
+from .data_split import split_train_val_test
 
 
-def check_and_remove_duplicate_ids(csv_path):
+def check_and_remove_duplicate_ids(df):
     """
     Reads a CSV file and removes duplicate IDs, keeping only unique rows.
+    Crucial to prevent data leakage later on in the splits
     """
-
-    # Read the CSV file
-    df = pd.read_csv(csv_path)
-    
+ 
     # Get initial row count
     initial_count = len(df)
     
@@ -18,17 +18,17 @@ def check_and_remove_duplicate_ids(csv_path):
     duplicates = df[df.duplicated(subset=['ID'], keep=False)]
     
     if len(duplicates) == 0:
-        print("✓ No duplicate IDs found. All rows are unique.")
+        print("No duplicate IDs found. All rows are unique.")
     else:
         duplicate_ids = duplicates['ID'].unique()
-        print(f"⚠ Found {len(duplicate_ids)} duplicate IDs:")
+        print(f"Found {len(duplicate_ids)} duplicate IDs:")
         for dup_id in duplicate_ids:
             count = len(df[df['ID'] == dup_id])
             print(f"  - {dup_id}: appears {count} times")
         
         # Remove duplicates, keeping the first occurrence
         df = df.drop_duplicates(subset=['ID'], keep='first')
-        print(f"\n✓ Removed {initial_count - len(df)} duplicate rows.")
+        print(f"\nRemoved {initial_count - len(df)} duplicate rows.")
     
     print(f"Final dataset: {len(df)} unique rows")
     
@@ -54,43 +54,79 @@ def check_ids_against_images(df, images_folder):
     # Get initial row count
     initial_count = len(df)
     
-    # Find IDs in CSV that don't have corresponding images
-    missing_images = []
-    for idx, row in df.iterrows():
-        if row['ID'] not in available_ids:
-            missing_images.append(row['ID'])
+    # Find IDs in CSV that don't have corresponding images (vectorized)
+    missing_mask = ~df['ID'].isin(available_ids)
+    missing_images = df.loc[missing_mask, 'ID'].tolist()
     
     if len(missing_images) == 0:
-        print(" All IDs in CSV have corresponding image files.")
+        print("All IDs in CSV have corresponding image files.")
     else:
-        print(f"\nFound {len(missing_images)} IDs without corresponding images")
+        print(f"Found {len(missing_images)} IDs without corresponding images")
         
         # Remove rows with missing images
         df = df[df['ID'].isin(available_ids)]
-        print(f"\n✓ Removed {initial_count - len(df)} rows with missing images.")
+        print(f"Removed {initial_count - len(df)} rows with missing images.")
     
     print(f"Final dataset: {len(df)} rows with valid images")
     
     return df
 
 
-def data_checks(csv_path,images_folder):
+
+def data_to_dict(x,y, images_folder):
+    """
+    Prepares the data structure for monai dataset.
+        
+    Returns:
+        list: List of dictionaries with format [{"image": "path/to/img.dcm", "label": 0}, ...]
+    """
+    images_folder = Path(images_folder)
+    data_dicts = []
     
-    # Step 1: Check and remove duplicate IDs
+    for idx in range(len(x)):
+        image_path = images_folder / f"{x[idx]}.dcm"
+        data_dict = {
+            "image": str(image_path),
+            "label": int(y[idx])
+        }
+        data_dicts.append(data_dict)
+    
+    print(f"Created data structure with {len(data_dicts)} samples")
+    
+    return data_dicts
+
+
+def prepare_data(df, images_folder):
+    """
+    Main orchestration function for data preparation.
+    """
     print("=" * 60)
-    print("STEP 1: Checking for duplicate IDs")
-    print("=" * 60)
-    df_clean = check_and_remove_duplicate_ids(csv_path)
+    print("Starting data preperation pipeline")
+    
+        # Step 1: Check and remove duplicate IDs
+    print("\nSTEP 1: Checking for duplicate IDs")
+    df_clean = check_and_remove_duplicate_ids(df)
     
     # Step 2: Check IDs against image files
-    print("=" * 60)
-    print("STEP 2: Checking IDs against image files")
-    print("=" * 60)
+    print("\nSTEP 2: Checking IDs against image files")
     clean_df = check_ids_against_images(df_clean, images_folder)
     
     # Optionally save the cleaned CSV
     output_path = "./Dataset/labels_clean.csv"
     clean_df.to_csv(output_path, index=False)
-    print(f"\n✓ Cleaned CSV saved to: {output_path}")
+    print(f"Cleaned CSV saved to: {output_path}")
+    
+    # Step 3: Prepare data structure
+    print("\nSTEP 3: Split to train, validation and test sets (70%, 15%, 15%)")
+    x_train, y_train, x_val, y_val, x_test, y_test = split_train_val_test(clean_df)
 
-    return clean_df
+    # Step 4: Prepare data structure
+    print("\nSTEP 4: Preparing data structure for train,val and test")
+    train_data_dict = data_to_dict(x_train,y_train, images_folder)
+    val_data_dict = data_to_dict(x_val,y_val, images_folder)
+    test_data_dict = data_to_dict(x_test,y_test, images_folder)
+    
+    print("Data preperation completed")
+    print("=" * 60)
+    
+    return train_data_dict,val_data_dict,test_data_dict
