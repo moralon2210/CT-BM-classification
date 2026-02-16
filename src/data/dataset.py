@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from monai.transforms import (
     Compose, LoadImaged, EnsureChannelFirstd, Spacingd,
-    ScaleIntensityRanged, CopyItemsd, ConcatItemsd, 
+    ScaleIntensityRanged, CopyItemsd, ConcatItemsd, DeleteItemsd,
     Resized, RandFlipd, Rand2DElasticd, EnsureTyped
 )
 from monai.data import CacheDataset, Dataset, DataLoader
@@ -48,6 +48,7 @@ def transformers(mode=None, seed=42):
             ScaleIntensityRanged(keys=["image_w2"], a_min=WINDOWS[1][0], a_max=WINDOWS[1][1], b_min=0.0, b_max=1.0, clip=True),
             ScaleIntensityRanged(keys=["image_w3"], a_min=WINDOWS[2][0], a_max=WINDOWS[2][1], b_min=0.0, b_max=1.0, clip=True),
             ConcatItemsd(keys=["image", "image_w2", "image_w3"], name="image", dim=0),
+            DeleteItemsd(keys=["image_w2", "image_w3"]),  # Clean up intermediate keys
 
             Resized(keys=["image"], spatial_size=(224, 224)),
 
@@ -55,7 +56,7 @@ def transformers(mode=None, seed=42):
             RandFlipd(keys=["image"], prob=0.5, spatial_axis=0),
             Rand2DElasticd(keys=["image"], spacing=(20, 20), magnitude_range=(0.5, 1.0), prob=0.1),
             
-            EnsureTyped(keys=["image", "label"]),
+            EnsureTyped(keys=["image", "label"], data_type="tensor", dtype=torch.float32, track_meta=False),
         ])
         # Note: MONAI transforms handle their own seeding internally via set_determinism()
 
@@ -70,9 +71,10 @@ def transformers(mode=None, seed=42):
             ScaleIntensityRanged(keys=["image_w2"], a_min=WINDOWS[1][0], a_max=WINDOWS[1][1], b_min=0.0, b_max=1.0, clip=True),
             ScaleIntensityRanged(keys=["image_w3"], a_min=WINDOWS[2][0], a_max=WINDOWS[2][1], b_min=0.0, b_max=1.0, clip=True),
             ConcatItemsd(keys=["image", "image_w2", "image_w3"], name="image", dim=0),
+            DeleteItemsd(keys=["image_w2", "image_w3"]),  # Clean up intermediate keys
 
             Resized(keys=["image"], spatial_size=(224, 224)),
-            EnsureTyped(keys=["image", "label"]),
+            EnsureTyped(keys=["image", "label"], data_type="tensor", dtype=torch.float32, track_meta=False),
         ])
         # Note: MONAI transforms handle their own seeding internally via set_determinism()
 
@@ -88,7 +90,7 @@ def create_datasets(train_data_dict, val_data_dict, test_data_dict, seed=42, cac
         seed: Random seed for reproducibility
         cache_rate: Percentage of data to cache (0.0 to 1.0). 1.0 = cache all, 0.0 = cache none
     """
-    print("\nSTEP 5: Creating datasets with transforms")
+    print("\nSTEP 6: Creating datasets with transforms")
     
     # Set MONAI determinism for reproducible augmentations
     set_determinism(seed=seed)
@@ -99,9 +101,10 @@ def create_datasets(train_data_dict, val_data_dict, test_data_dict, seed=42, cac
     
     # Create datasets with caching for faster training
     print(f"Using CacheDataset with cache_rate={cache_rate}")
-    train_dataset = CacheDataset(data=train_data_dict, transform=train_transforms, cache_rate=cache_rate)
-    val_dataset = CacheDataset(data=val_data_dict, transform=val_test_transforms, cache_rate=cache_rate)
-    test_dataset = CacheDataset(data=test_data_dict, transform=val_test_transforms, cache_rate=cache_rate)
+    # Using more workers for initial cache loading (8 workers) for faster startup
+    train_dataset = CacheDataset(data=train_data_dict, transform=train_transforms, cache_rate=cache_rate, num_workers=8)
+    val_dataset = CacheDataset(data=val_data_dict, transform=val_test_transforms, cache_rate=cache_rate, num_workers=8)
+    test_dataset = CacheDataset(data=test_data_dict, transform=val_test_transforms, cache_rate=cache_rate, num_workers=8)
     
     print(f"Train samples: {len(train_dataset)}")
     print(f"Val samples: {len(val_dataset)}")
@@ -111,18 +114,32 @@ def create_datasets(train_data_dict, val_data_dict, test_data_dict, seed=42, cac
 
 # 4. Create DataLoaders
 def create_dataloaders(train_dataset, val_dataset, test_dataset, 
-                       batch_size=32, num_workers=4):
+                       batch_size=32, num_workers=4, prefetch_factor=2):
     """
     Create train, validation, and test dataloaders.
         train_loader, val_loader, test_loader
     """
-    print("\nSTEP 6: Creating dataloaders")
-    print(f"Batch size: {batch_size}, Workers: {num_workers}")
+    print("\nSTEP 7: Creating dataloaders")
+    print(f"Batch size: {batch_size}, Workers: {num_workers}, Prefetch factor: {prefetch_factor}")
     
-    # Create dataloaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    # Create dataloaders with optimized settings for Windows + CUDA
+    # Note: persistent_workers=False is faster on Windows with MONAI+CUDA
+    # prefetch_factor: number of batches loaded in advance per worker (default=2)
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, 
+        num_workers=num_workers, persistent_workers=False, pin_memory=True,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None
+    )
+    val_loader = DataLoader(
+        val_dataset, batch_size=batch_size, shuffle=False, 
+        num_workers=num_workers, persistent_workers=False, pin_memory=True,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None
+    )
+    test_loader = DataLoader(
+        test_dataset, batch_size=batch_size, shuffle=False, 
+        num_workers=num_workers, persistent_workers=False, pin_memory=True,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None
+    )
     
     print(f"Train batches: {len(train_loader)}")
     print(f"Val batches: {len(val_loader)}")
@@ -146,6 +163,48 @@ def visualize_random_sample(dataset):
     # Extract image and label
     image = sample["image"]  # Shape: (3, 224, 224)
     label = sample["label"].item() if torch.is_tensor(sample["label"]) else sample["label"]
+    
+    # ============== SANITY CHECKS ==============
+    print("\n" + "="*60)
+    print("Sanity checks on visualized image")
+    print("="*60)
+    
+    # Convert to numpy for checks if tensor
+    if torch.is_tensor(image):
+        img_array = image.cpu().numpy()
+    else:
+        img_array = image
+    
+    # Check 1: Shape (3 channels, 224x224)
+    expected_shape = (3, 224, 224)
+    actual_shape = img_array.shape
+    print(f"✓ Shape Check: {actual_shape} {'✓ PASS' if actual_shape == expected_shape else '✗ FAIL'}")
+    assert actual_shape == expected_shape, f"Expected shape {expected_shape}, got {actual_shape}"
+    
+    # Check 2: Number of channels
+    num_channels = img_array.shape[0]
+    print(f"✓ Channel Check: {num_channels} channels {'✓ PASS' if num_channels == 3 else '✗ FAIL'}")
+    assert num_channels == 3, f"Expected 3 channels, got {num_channels}"
+    
+    # Check 3: Value range (0-1 for grayscale)
+    min_val = img_array.min()
+    max_val = img_array.max()
+    in_range = (min_val >= 0.0) and (max_val <= 1.0)
+    print(f"✓ Value Range Check: [{min_val:.4f}, {max_val:.4f}] {'✓ PASS' if in_range else '✗ FAIL'}")
+    assert in_range, f"Values outside [0, 1] range: [{min_val}, {max_val}]"
+    
+    # Check 4: Per-channel statistics (additional info)
+    print("\nPer-Channel Statistics:")
+    for i in range(3):
+        ch_min = img_array[i].min()
+        ch_max = img_array[i].max()
+        ch_mean = img_array[i].mean()
+        ch_std = img_array[i].std()
+        print(f"  Channel {i}: min={ch_min:.4f}, max={ch_max:.4f}, mean={ch_mean:.4f}, std={ch_std:.4f}")
+    
+    print("="*60)
+    print("ALL SANITY CHECKS PASSED ✓")
+    print("="*60 + "\n")
     
     # Channel names with window settings and purposes
     channel_info = [
