@@ -95,25 +95,11 @@ This will:
 
 ## Training Configuration
 
-Edit `src/train/train.py` to customize hyperparameters before training:
-
-```python
 # Key parameters
-csv_path = "./Dataset/train/labels1.csv"
-images_folder = "./Dataset/train/CTs"
 batch_size = 8          # Adjust based on GPU memory
 num_epochs = 20         # Increase for production
 learning_rate = 1e-4    # reduced during training using a scheduler
 ```
-
-The training pipeline automatically:
-- Validates data and removes duplicates
-- Splits into train/val/test (70%/15%/15%)
-- Calculates alpha for focal loss
-- Optimizes F2-score and finds best threshold
-- Saves checkpoints to `checkpoints/` and metrics to `results/`
-
----
 
 ## Project Structure
 
