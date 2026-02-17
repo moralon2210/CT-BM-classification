@@ -37,13 +37,13 @@ pip install -r requirements.txt
 Organize your data as follows:
 ```
 ├── Dataset/
-│   ├── train/
+│   ├── train/             # Train dataset
 │   │   ├── CTs/           # Training DICOM files
 │   │   │   ├── patient001.dcm
 │   │   │   ├── patient002.dcm
 │   │   │   └── ...
 │   │   └── labels1.csv    # Format: ID,Label (0=no metastasis, 1=metastasis)
-│   └── inference/
+│   └── inference/         # Inference dataset
 │       └── CTs/           # Inference images (no labels needed)
 ├── checkpoints/           # Created automatically during training
 ├── inference_model/       # Place your inference model here - for a clean seperation between modes 
@@ -86,6 +86,7 @@ This will:
 
 ### Mode 2: Inference Mode
 Run predictions on new CT images using a trained model > uses the data from Dataset/inference
+To run inference, you will need to place your model (pth file) under inference_model. File name should be best_model.pth.
 
 ```bash
 python main.py inference
@@ -101,7 +102,7 @@ This will:
 ```python
 # Key parameters
 batch_size = 8          # Adjust based on GPU memory
-num_epochs = 20         # Increase for production
+num_epochs = 10         # Increase for production
 learning_rate = 1e-4    # reduced during training using a scheduler
 ```
 
@@ -114,7 +115,7 @@ learning_rate = 1e-4    # reduced during training using a scheduler
 │   ├── model.py           # EfficientNetV2-M model
 │   └── inference.py       # Inference pipeline
 ├── Dataset/
-│   ├── train/             # Training files
+│   ├── train/             # Train dataset
 │   └── inference/CTs/     # Inference CT files
 ├── checkpoints/           # Training checkpoints
 ├── inference_model/       # Model for infernece (for seperated piplines)
