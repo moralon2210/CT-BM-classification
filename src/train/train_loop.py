@@ -5,9 +5,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 import numpy as np
 from pathlib import Path
-from sklearn.metrics import fbeta_score, recall_score, average_precision_score, precision_recall_curve
+from sklearn.metrics import fbeta_score, recall_score, auc, precision_recall_curve
 import torch.nn.functional as F
 import json
+import shutil
 from .train_utils import binary_focal_loss, find_best_threshold, calculate_metrics
 
 def train_loop(model, train_loader, val_loader, num_epochs=20, learning_rate=1e-4, 
@@ -28,8 +29,11 @@ def train_loop(model, train_loader, val_loader, num_epochs=20, learning_rate=1e-
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, min_lr=1e-6,patience=2)
     
-    # Create checkpoint directory
+    # Clear and create checkpoint directory
     save_path = Path(save_dir)
+    if save_path.exists():
+        shutil.rmtree(save_path)
+        print(f"Cleared existing checkpoints in {save_dir}")
     save_path.mkdir(parents=True, exist_ok=True)
     
     # Training history
@@ -40,8 +44,8 @@ def train_loop(model, train_loader, val_loader, num_epochs=20, learning_rate=1e-
         'val_fbeta': [],
         'train_recall': [],
         'val_recall': [],
-        'train_avg_precision': [],
-        'val_avg_precision': [],
+        'train_pr_auc': [],
+        'val_pr_auc': [],
         'best_thresholds': []
     }
     
@@ -97,7 +101,7 @@ def train_loop(model, train_loader, val_loader, num_epochs=20, learning_rate=1e-
         
         # Calculate epoch training metrics
         epoch_train_loss = train_loss / len(train_loader.dataset)
-        epoch_train_fbeta, epoch_train_recall, epoch_train_avg_precision = calculate_metrics(
+        epoch_train_fbeta, epoch_train_recall, epoch_train_pr_auc = calculate_metrics(
             all_train_labels, all_train_probs, all_train_preds, fbeta_beta=fbeta_beta
         )
         
@@ -144,7 +148,7 @@ def train_loop(model, train_loader, val_loader, num_epochs=20, learning_rate=1e-
         
         # Calculate epoch validation metrics (including the actual F-beta at the best threshold)
         epoch_val_loss = val_loss / len(val_loader.dataset)
-        epoch_val_fbeta, epoch_val_recall, epoch_val_avg_precision = calculate_metrics(
+        epoch_val_fbeta, epoch_val_recall, epoch_val_pr_auc = calculate_metrics(
             all_val_labels, all_val_probs, all_val_preds, fbeta_beta=fbeta_beta
         )
         
@@ -155,17 +159,17 @@ def train_loop(model, train_loader, val_loader, num_epochs=20, learning_rate=1e-
         history['val_fbeta'].append(epoch_val_fbeta)
         history['train_recall'].append(epoch_train_recall)
         history['val_recall'].append(epoch_val_recall)
-        history['train_avg_precision'].append(epoch_train_avg_precision)
-        history['val_avg_precision'].append(epoch_val_avg_precision)
+        history['train_pr_auc'].append(epoch_train_pr_auc)
+        history['val_pr_auc'].append(epoch_val_pr_auc)
         history['best_thresholds'].append(best_threshold)
         
         # Print epoch results
-        print(f"Train Loss: {epoch_train_loss:.4f} | Train F{fbeta_beta}: {epoch_train_fbeta:.4f} | Train Recall: {epoch_train_recall:.4f} | Train AP: {epoch_train_avg_precision:.4f}")
-        print(f"Val Loss:   {epoch_val_loss:.4f} | Val F{fbeta_beta}:   {epoch_val_fbeta:.4f} | Val Recall:   {epoch_val_recall:.4f} | Val AP:   {epoch_val_avg_precision:.4f}")
+        print(f"Train Loss: {epoch_train_loss:.4f} | Train F{fbeta_beta}: {epoch_train_fbeta:.4f} | Train Recall: {epoch_train_recall:.4f} | Train PR AUC: {epoch_train_pr_auc:.4f}")
+        print(f"Val Loss:   {epoch_val_loss:.4f} | Val F{fbeta_beta}:   {epoch_val_fbeta:.4f} | Val Recall:   {epoch_val_recall:.4f} | Val PR AUC:   {epoch_val_pr_auc:.4f}")
         print(f"Best Threshold: {best_threshold:.4f} (F{fbeta_beta} at threshold: {best_fbeta_at_threshold:.4f})")
         
-        # Step the scheduler based on validation average precision
-        scheduler.step(epoch_val_avg_precision)
+        # Step the scheduler based on validation PR AUC
+        scheduler.step(epoch_val_pr_auc)
         
         # Save best model based on F-beta score (higher is better)
         if epoch_val_fbeta > best_val_fbeta:
@@ -182,11 +186,11 @@ def train_loop(model, train_loader, val_loader, num_epochs=20, learning_rate=1e-
                 'val_fbeta': epoch_val_fbeta,
                 'train_recall': epoch_train_recall,
                 'val_recall': epoch_val_recall,
-                'train_avg_precision': epoch_train_avg_precision,
-                'val_avg_precision': epoch_val_avg_precision,
+                'train_pr_auc': epoch_train_pr_auc,
+                'val_pr_auc': epoch_val_pr_auc,
                 'best_threshold': best_threshold,
             }, checkpoint_path)
-            print(f"Saved best model (val_f{fbeta_beta}: {best_val_fbeta:.4f}, val_loss: {epoch_val_loss:.4f}, val_recall: {epoch_val_recall:.4f}, val_ap: {epoch_val_avg_precision:.4f})")
+            print(f"Saved best model (val_f{fbeta_beta}: {best_val_fbeta:.4f}, val_loss: {epoch_val_loss:.4f}, val_recall: {epoch_val_recall:.4f}, val_pr_auc: {epoch_val_pr_auc:.4f})")
         
         # Save checkpoint every 5 epochs
         if (epoch + 1) % 5 == 0:
@@ -201,8 +205,8 @@ def train_loop(model, train_loader, val_loader, num_epochs=20, learning_rate=1e-
                 'val_fbeta': epoch_val_fbeta,
                 'train_recall': epoch_train_recall,
                 'val_recall': epoch_val_recall,
-                'train_avg_precision': epoch_train_avg_precision,
-                'val_avg_precision': epoch_val_avg_precision,
+                'train_pr_auc': epoch_train_pr_auc,
+                'val_pr_auc': epoch_val_pr_auc,
                 'best_threshold': best_threshold,
             }, checkpoint_path)
             print(f"Saved checkpoint at epoch {epoch+1}")

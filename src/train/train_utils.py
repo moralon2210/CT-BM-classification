@@ -1,4 +1,4 @@
-from sklearn.metrics import fbeta_score, recall_score, average_precision_score, precision_recall_curve
+from sklearn.metrics import fbeta_score, recall_score, auc, precision_recall_curve
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -65,11 +65,14 @@ def find_best_threshold(labels, probs, beta=2.0):
 
 def calculate_metrics(labels, probs, preds, fbeta_beta=2.0):
     """
-    Calculate classification metrics: F-beta score, recall, and Average Precision.
+    Calculate classification metrics: F-beta score, recall, and PR AUC.
     
     """
     fbeta = fbeta_score(labels, preds, beta=fbeta_beta)
     recall = recall_score(labels, preds)
-    avg_precision = average_precision_score(labels, probs)
     
-    return fbeta, recall, avg_precision
+    # Calculate PR AUC (Precision-Recall Area Under Curve)
+    precision, recall_curve, _ = precision_recall_curve(labels, probs)
+    pr_auc = auc(recall_curve, precision)
+    
+    return fbeta, recall, pr_auc

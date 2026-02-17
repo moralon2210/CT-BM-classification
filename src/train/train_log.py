@@ -3,9 +3,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 
-def save_history(history, checkpoint_dir="./checkpoints"):
-    """Save training history to checkpoint folder as JSON."""
-    save_path = Path(checkpoint_dir)
+def save_history(history, save_dir="./results/train"):
+    """Save training history to training results folder as JSON."""
+    save_path = Path(save_dir)
     save_path.mkdir(parents=True, exist_ok=True)
     
     file_path = save_path / "train.log"
@@ -16,7 +16,7 @@ def save_history(history, checkpoint_dir="./checkpoints"):
     return file_path
 
 
-def plot_training_metrics(history, save_dir="./results"):
+def plot_training_metrics(history, save_dir="./results/train"):
     """Plot training and validation loss and PR-AUC and save to file."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
     
@@ -31,12 +31,12 @@ def plot_training_metrics(history, save_dir="./results"):
     ax1.legend()
     ax1.grid(True)
     
-    # Average Precision plot
-    ax2.plot(epochs, history['train_avg_precision'], 'b-', label='Train')
-    ax2.plot(epochs, history['val_avg_precision'], 'r-', label='Val')
+    # PR AUC plot
+    ax2.plot(epochs, history['train_pr_auc'], 'b-', label='Train')
+    ax2.plot(epochs, history['val_pr_auc'], 'r-', label='Val')
     ax2.set_xlabel('Epoch')
-    ax2.set_ylabel('Average Precision')
-    ax2.set_title('Average Precision (PR-AUC)')
+    ax2.set_ylabel('PR AUC')
+    ax2.set_title('PR AUC (Precision-Recall)')
     ax2.legend()
     ax2.grid(True)
     

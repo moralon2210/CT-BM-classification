@@ -7,13 +7,14 @@ import numpy as np
 import random
 from multiprocessing import freeze_support
 from pathlib import Path
-from sklearn.metrics import fbeta_score, recall_score, confusion_matrix, precision_score
+from sklearn.metrics import confusion_matrix, precision_score
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import seaborn as sns
 # Import and run training loop
 from .train_loop import train_loop
 from .train_log import save_history,plot_training_metrics
+from .train_utils import calculate_metrics
 
 def main():
     freeze_support()  # Required for Windows multiprocessing
@@ -63,7 +64,7 @@ def main():
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        num_epochs=20,
+        num_epochs=10,
         learning_rate=1e-4,
         device=device,  # Auto-detect GPU/CPU
         save_dir="./checkpoints",
@@ -71,8 +72,8 @@ def main():
         focal_gamma=2.0,    # Standard focusing parameter
         )
 
-    save_history(history)
-    plot_training_metrics(history) 
+    save_history(history, save_dir="./results/train")
+    plot_training_metrics(history, save_dir="./results/train") 
 
     # ==================== STEP 3: TESTING ====================
     print("\n" + "="*60)
@@ -80,7 +81,7 @@ def main():
     print("="*60)
     
     # Create results directory
-    Path("./results").mkdir(exist_ok=True)
+    Path("./results/train").mkdir(parents=True, exist_ok=True)
     
     # Load best model
     checkpoint = torch.load("./checkpoints/best_model.pth", map_location=device, weights_only=False)
@@ -113,14 +114,13 @@ def main():
     all_preds = np.array(all_preds)
     all_probs = np.array(all_probs)
     
-    # Calculate metrics
-    f2 = fbeta_score(all_labels, all_preds, beta=2)
-    recall = recall_score(all_labels, all_preds)
+    # Calculate metrics using the same function as training
+    f2, recall, pr_auc = calculate_metrics(all_labels, all_probs, all_preds, fbeta_beta=2.0)
     precision = precision_score(all_labels, all_preds, zero_division=0)
     cm = confusion_matrix(all_labels, all_preds)
     
     # Print results
-    print(f"\nTest F2-Score: {f2:.4f} | Test Recall: {recall:.4f} | Test Precision: {precision:.4f}")
+    print(f"\nTest F2-Score: {f2:.4f} | Test Recall: {recall:.4f} | Test Precision: {precision:.4f} | Test PR AUC: {pr_auc:.4f}")
     print(f"\nConfusion Matrix:\n{cm}")
     
     # Visualize and save confusion matrix
@@ -133,25 +133,26 @@ def main():
     plt.ylabel('True Label')
     plt.xlabel('Predicted Label')
     plt.tight_layout()
-    plt.savefig("./results/confusion_matrix.png", dpi=300, bbox_inches='tight')
+    plt.savefig("./results/train/confusion_matrix.png", dpi=300, bbox_inches='tight')
     plt.close()
-    print("Confusion matrix saved to ./results/confusion_matrix.png")
+    print("Confusion matrix saved to ./results/train/confusion_matrix.png")
     
     # Save results
     results = {
         'f2_score': float(f2),
         'recall': float(recall),
         'precision': float(precision),
+        'pr_auc': float(pr_auc),
     }
     
-    pd.DataFrame([results]).to_csv("./results/test_results.csv", index=False)
+    pd.DataFrame([results]).to_csv("./results/train/test_results.csv", index=False)
     
     cm_df = pd.DataFrame(
         cm,
         index=['Actual Negative', 'Actual Positive'],
         columns=['Predicted Negative', 'Predicted Positive']
     )
-    cm_df.to_csv("./results/confusion_matrix.csv")
+    cm_df.to_csv("./results/train/confusion_matrix.csv")
     
     # Save predictions
     predictions_df = pd.DataFrame({
@@ -160,9 +161,9 @@ def main():
         'probability': all_probs,
         'prediction': all_preds
     })
-    predictions_df.to_csv("./results/test_predictions.csv", index=False)
+    predictions_df.to_csv("./results/train/test_predictions.csv", index=False)
     
-    print("\nTesting completed! Results saved to ./results/")
+    print("\nTesting completed! Results saved to ./results/train/")
     print("="*60)
 
 if __name__ == '__main__':

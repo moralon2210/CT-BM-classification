@@ -36,7 +36,6 @@ pip install -r requirements.txt
 ### Step 4: Prepare Dataset Structure
 Organize your data as follows:
 ```
-Samueli Institute/
 ├── Dataset/
 │   ├── train/
 │   │   ├── CTs/           # Training DICOM files
@@ -47,7 +46,10 @@ Samueli Institute/
 │   └── inference/
 │       └── CTs/           # Inference images (no labels needed)
 ├── checkpoints/           # Created automatically during training
+├── inference_model/       # Place your inference model here - for a clean seperation between modes 
 ├── results/               # Created automatically for logs and metrics
+│   ├── train/             # Training logs and metric plots
+│   └── inference/         # Inference predictions
 ├── src/
 └── requirements.txt
 ```
@@ -74,12 +76,13 @@ python main.py train
 ```
 This will:
 - Save the best model to `checkpoints/best_model.pth`
-- Save training history and metrics plots to `results/`
-- Evaluate on test set and save:
-  - `results/test_results.csv` - F2-score, recall, and precision metrics
-  - `results/test_predictions.csv` - Detailed predictions with image names, true labels, probabilities, and predictions
-  - `results/confusion_matrix.csv` - Confusion matrix data
-  - `results/confusion_matrix.png` - Confusion matrix visualization
+- Save all training results to `results/train/`:
+  - `train.log` - Training history (JSON)
+  - `training_metrics.png` - Loss and PR-AUC plots
+  - `test_results.csv` - F2-score, recall, and precision metrics
+  - `test_predictions.csv` - Detailed predictions with image names, true labels, probabilities, and predictions
+  - `confusion_matrix.csv` - Confusion matrix data
+  - `confusion_matrix.png` - Confusion matrix visualization
 
 ### Mode 2: Inference Mode
 Run predictions on new CT images using a trained model > uses the data from Dataset/inference
@@ -89,12 +92,13 @@ python main.py inference
 ```
 
 This will:
-- Load the best model from `checkpoints/best_model.pth`
-- Save predictions to `results/predictions.csv`
+- Load the best model from `inference_model/best_model.pth`
+- Save predictions to `results/inference/predictions.csv` with image names, predictions (0/1), and probabilities
 
 
 ## Training Configuration
 
+```python
 # Key parameters
 batch_size = 8          # Adjust based on GPU memory
 num_epochs = 20         # Increase for production
@@ -104,17 +108,20 @@ learning_rate = 1e-4    # reduced during training using a scheduler
 ## Project Structure
 
 ```
-Samueli Institute/
 ├── src/
 │   ├── data/              # Data processing and loading
 │   ├── train/             # Training scripts and utilities
-│   ├── model.py           # EfficientNetV2-M wrapper
+│   ├── model.py           # EfficientNetV2-M model
 │   └── inference.py       # Inference pipeline
 ├── Dataset/
 │   ├── train/             # Training files
 │   └── inference/CTs/     # Inference CT files
-├── checkpoints/           # Saved models
-├── results/               # Training logs and metrics
+├── checkpoints/           # Training checkpoints
+├── inference_model/       # Model for infernece (for seperated piplines)
+├── results/               # All results
+│   ├── train/             # All training results (logs, plots, metrics, test results)
+│   └── inference/         # Inference predictions
+├── myresults/             # User-specific results (protected from overwrites)
 └── main.py                # Entry point
 ```
 

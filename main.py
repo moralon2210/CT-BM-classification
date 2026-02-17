@@ -8,12 +8,10 @@ def main():
     parser.add_argument('mode', choices=['train', 'inference'], help='Mode: train or inference')
     
     args = parser.parse_args()
-    args.mode = 'train'
     if args.mode == 'train':
         train_main()
-    elif args.mode == 'inference':
-        
+    elif args.mode == 'inference':  
         inference_main()
 
 if __name__ == '__main__':
-    train_main()
+    main()

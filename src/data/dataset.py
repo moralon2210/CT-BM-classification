@@ -33,8 +33,16 @@ WINDOWS = [
 ]
 
 # 2. Training Transforms
-def transformers(mode=None, seed=42):
-    if mode=='train':
+def transformers(mode='eval', seed=42):
+    """
+    Create transforms for different modes.
+    
+    Args:
+        mode: 'train' (augmentations + labels), 'eval' (val/test with labels), or 'inference' (no labels)
+        seed: Random seed for reproducibility
+    """
+    if mode == 'train':
+        # Training mode: With augmentations and labels
         return Compose([
             LoadImaged(keys=["image"]),
             EnsureChannelFirstd(keys=["image"]),
@@ -60,7 +68,8 @@ def transformers(mode=None, seed=42):
         ])
         # Note: MONAI transforms handle their own seeding internally via set_determinism()
 
-    elif mode is None:
+    elif mode == 'eval':
+        # Evaluation mode: For validation/test with labels, no augmentations
         return Compose([
             LoadImaged(keys=["image"]),
             EnsureChannelFirstd(keys=["image"]),
@@ -76,7 +85,27 @@ def transformers(mode=None, seed=42):
             Resized(keys=["image"], spatial_size=(224, 224)),
             EnsureTyped(keys=["image", "label"], data_type="tensor", dtype=torch.float32, track_meta=False),
         ])
-        # Note: MONAI transforms handle their own seeding internally via set_determinism()
+    
+    elif mode == 'inference':
+        # Inference mode: No labels, only process images
+        return Compose([
+            LoadImaged(keys=["image"]),
+            EnsureChannelFirstd(keys=["image"]),
+            Spacingd(keys=["image"], pixdim=(1.0, 1.0), mode="bilinear"),
+            
+            CopyItemsd(keys=["image"], times=2, names=["image_w2", "image_w3"]),
+            ScaleIntensityRanged(keys=["image"],    a_min=WINDOWS[0][0], a_max=WINDOWS[0][1], b_min=0.0, b_max=1.0, clip=True),
+            ScaleIntensityRanged(keys=["image_w2"], a_min=WINDOWS[1][0], a_max=WINDOWS[1][1], b_min=0.0, b_max=1.0, clip=True),
+            ScaleIntensityRanged(keys=["image_w3"], a_min=WINDOWS[2][0], a_max=WINDOWS[2][1], b_min=0.0, b_max=1.0, clip=True),
+            ConcatItemsd(keys=["image", "image_w2", "image_w3"], name="image", dim=0),
+            DeleteItemsd(keys=["image_w2", "image_w3"]),  # Clean up intermediate keys
+
+            Resized(keys=["image"], spatial_size=(224, 224)),
+            EnsureTyped(keys=["image"], data_type="tensor", dtype=torch.float32, track_meta=False),
+        ])
+    
+    else:
+        raise ValueError(f"Invalid mode: {mode}. Must be 'train', 'eval', or 'inference'")
 
 # 3. Create Datasets
 def create_datasets(train_data_dict, val_data_dict, test_data_dict, seed=42, cache_rate=1.0):
@@ -89,7 +118,7 @@ def create_datasets(train_data_dict, val_data_dict, test_data_dict, seed=42, cac
     
     # Create transforms
     train_transforms = transformers(mode='train', seed=seed)
-    val_test_transforms = transformers(seed=seed)
+    val_test_transforms = transformers(mode='eval', seed=seed)
     
     # Create datasets with caching for faster training
     train_dataset = CacheDataset(data=train_data_dict, transform=train_transforms, cache_rate=cache_rate, num_workers=8)
