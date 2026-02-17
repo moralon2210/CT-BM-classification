@@ -39,7 +39,7 @@ Organize your data as follows:
 Samueli Institute/
 ├── Dataset/
 │   ├── train/
-│   │   ├── CTs/           # Training DICOM/NIfTI files
+│   │   ├── CTs/           # Training DICOM files
 │   │   │   ├── patient001.dcm
 │   │   │   ├── patient002.dcm
 │   │   │   └── ...
@@ -74,7 +74,12 @@ python main.py train
 ```
 This will:
 - Save the best model to `checkpoints/best_model.pth`
-- Save predictions to `predictions.csv`
+- Save training history and metrics plots to `results/`
+- Evaluate on test set and save:
+  - `results/test_results.csv` - F2-score, recall, and precision metrics
+  - `results/test_predictions.csv` - Detailed predictions with image names, true labels, probabilities, and predictions
+  - `results/confusion_matrix.csv` - Confusion matrix data
+  - `results/confusion_matrix.png` - Confusion matrix visualization
 
 ### Mode 2: Inference Mode
 Run predictions on new CT images using a trained model > uses the data from Dataset/inference
@@ -85,7 +90,7 @@ python main.py inference
 
 This will:
 - Load the best model from `checkpoints/best_model.pth`
-- Save predictions to `predictions.csv`
+- Save predictions to `results/predictions.csv`
 
 
 ## Training Configuration
