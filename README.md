@@ -101,8 +101,8 @@ This will:
 
 ```python
 # Key parameters
-batch_size = 8          # Adjust based on GPU memory
-num_epochs = 10         # Increase for production
+batch_size = 8          
+num_epochs = 10         
 learning_rate = 1e-4    # reduced during training using a scheduler
 ```
 
