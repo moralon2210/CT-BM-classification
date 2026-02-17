@@ -12,6 +12,7 @@ This project implements an end-to-end training pipeline for detecting brain meta
 - **Focal Loss**: Handles class imbalance with configurable alpha/gamma parameters
 - **F-beta Optimization**: Uses F2 score to prioritize recall and select threshold accordingly
 
+![Data Balance](docs/Data%20balance.png)
 
 ## Environment Setup
 
