@@ -82,16 +82,8 @@ def transformers(mode=None, seed=42):
 def create_datasets(train_data_dict, val_data_dict, test_data_dict, seed=42, cache_rate=1.0):
     """
     Create train, validation, and test datasets with appropriate transforms.
-    
-    Args:
-        train_data_dict: Training data dictionary
-        val_data_dict: Validation data dictionary
-        test_data_dict: Test data dictionary
-        seed: Random seed for reproducibility
-        cache_rate: Percentage of data to cache (0.0 to 1.0). 1.0 = cache all, 0.0 = cache none
+
     """
-    print("\nSTEP 6: Creating datasets with transforms")
-    
     # Set MONAI determinism for reproducible augmentations
     set_determinism(seed=seed)
     
@@ -100,15 +92,11 @@ def create_datasets(train_data_dict, val_data_dict, test_data_dict, seed=42, cac
     val_test_transforms = transformers(seed=seed)
     
     # Create datasets with caching for faster training
-    print(f"Using CacheDataset with cache_rate={cache_rate}")
-    # Using more workers for initial cache loading (8 workers) for faster startup
     train_dataset = CacheDataset(data=train_data_dict, transform=train_transforms, cache_rate=cache_rate, num_workers=8)
     val_dataset = CacheDataset(data=val_data_dict, transform=val_test_transforms, cache_rate=cache_rate, num_workers=8)
     test_dataset = CacheDataset(data=test_data_dict, transform=val_test_transforms, cache_rate=cache_rate, num_workers=8)
     
-    print(f"Train samples: {len(train_dataset)}")
-    print(f"Val samples: {len(val_dataset)}")
-    print(f"Test samples: {len(test_dataset)}")
+    print(f"Created datasets: {len(train_dataset)} train, {len(val_dataset)} val, {len(test_dataset)} test | Cache rate: {cache_rate}")
     
     return train_dataset, val_dataset, test_dataset
 
@@ -119,9 +107,6 @@ def create_dataloaders(train_dataset, val_dataset, test_dataset,
     Create train, validation, and test dataloaders.
         train_loader, val_loader, test_loader
     """
-    print("\nSTEP 7: Creating dataloaders")
-    print(f"Batch size: {batch_size}, Workers: {num_workers}, Prefetch factor: {prefetch_factor}")
-    
     # Create dataloaders with optimized settings for Windows + CUDA
     # Note: persistent_workers=False is faster on Windows with MONAI+CUDA
     # prefetch_factor: number of batches loaded in advance per worker (default=2)
@@ -141,10 +126,7 @@ def create_dataloaders(train_dataset, val_dataset, test_dataset,
         prefetch_factor=prefetch_factor if num_workers > 0 else None
     )
     
-    print(f"Train batches: {len(train_loader)}")
-    print(f"Val batches: {len(val_loader)}")
-    print(f"Test batches: {len(test_loader)}")
-    print("=" * 60)
+    print(f" Created dataloaders: {len(train_loader)} train, {len(val_loader)} val, {len(test_loader)} test batches | Batch size: {batch_size}")
     
     return train_loader, val_loader, test_loader
 
@@ -165,10 +147,6 @@ def visualize_random_sample(dataset):
     label = sample["label"].item() if torch.is_tensor(sample["label"]) else sample["label"]
     
     # ============== SANITY CHECKS ==============
-    print("\n" + "="*60)
-    print("Sanity checks on visualized image")
-    print("="*60)
-    
     # Convert to numpy for checks if tensor
     if torch.is_tensor(image):
         img_array = image.cpu().numpy()
@@ -178,33 +156,19 @@ def visualize_random_sample(dataset):
     # Check 1: Shape (3 channels, 224x224)
     expected_shape = (3, 224, 224)
     actual_shape = img_array.shape
-    print(f"✓ Shape Check: {actual_shape} {'✓ PASS' if actual_shape == expected_shape else '✗ FAIL'}")
     assert actual_shape == expected_shape, f"Expected shape {expected_shape}, got {actual_shape}"
     
     # Check 2: Number of channels
     num_channels = img_array.shape[0]
-    print(f"✓ Channel Check: {num_channels} channels {'✓ PASS' if num_channels == 3 else '✗ FAIL'}")
     assert num_channels == 3, f"Expected 3 channels, got {num_channels}"
     
     # Check 3: Value range (0-1 for grayscale)
     min_val = img_array.min()
     max_val = img_array.max()
     in_range = (min_val >= 0.0) and (max_val <= 1.0)
-    print(f"✓ Value Range Check: [{min_val:.4f}, {max_val:.4f}] {'✓ PASS' if in_range else '✗ FAIL'}")
     assert in_range, f"Values outside [0, 1] range: [{min_val}, {max_val}]"
     
-    # Check 4: Per-channel statistics (additional info)
-    print("\nPer-Channel Statistics:")
-    for i in range(3):
-        ch_min = img_array[i].min()
-        ch_max = img_array[i].max()
-        ch_mean = img_array[i].mean()
-        ch_std = img_array[i].std()
-        print(f"  Channel {i}: min={ch_min:.4f}, max={ch_max:.4f}, mean={ch_mean:.4f}, std={ch_std:.4f}")
-    
-    print("="*60)
-    print("ALL SANITY CHECKS PASSED ✓")
-    print("="*60 + "\n")
+    print(f"\nSanity checks passed: Shape {actual_shape} | Range [{min_val:.4f}, {max_val:.4f}]")
     
     # Channel names with window settings and purposes
     channel_info = [

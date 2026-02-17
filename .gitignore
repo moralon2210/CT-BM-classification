@@ -1,6 +1,7 @@
 # Dataset files (DICOM images)
-Dataset/CTs
-Dataset/labels1.csv
+Dataset/train/labels1.csv
+Dataset/train/CTs
+Dataset/inference/CTs
 
 # Python
 __pycache__/
