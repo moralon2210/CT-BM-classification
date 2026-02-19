@@ -30,7 +30,7 @@ conda activate ct_bm
 ```bash
 pip install -r requirements.txt
 ```
-
+*Optional — GPU:** If you have an NVIDIA GPU and want to use it for faster training, install PyTorch with CUDA
 
 ### Step 4: Prepare Dataset Structure
 Organize your data as follows:
